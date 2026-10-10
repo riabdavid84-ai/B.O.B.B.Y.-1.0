@@ -16,7 +16,29 @@
     flex-direction: column;
     height: 100dvh;
     overflow: hidden;
+    position: relative;
   }
+
+  /* --- Dark Observatory: star-field layer --- */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px),
+      radial-gradient(rgba(212,175,55,0.3) 1px, transparent 1px);
+    background-size: 90px 90px, 140px 140px;
+    background-position: 0 0, 45px 70px;
+    opacity: 0.5;
+    animation: twinkle 6s ease-in-out infinite alternate;
+    z-index: 0;
+  }
+  @keyframes twinkle {
+    from { opacity: 0.3; }
+    to { opacity: 0.6; }
+  }
+
   #lockScreen {
     position: fixed;
     inset: 0;
@@ -30,10 +52,7 @@
     padding: 20px;
     text-align: center;
   }
-  #lockScreen h2 {
-    color: #d4af37;
-    letter-spacing: 2px;
-  }
+  #lockScreen h2 { color: #d4af37; letter-spacing: 2px; }
   #passInput {
     padding: 12px 16px;
     border-radius: 20px;
@@ -69,6 +88,8 @@
     letter-spacing: 2px;
     color: #d4af37;
     text-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
+    position: relative;
+    z-index: 2;
   }
   header button {
     font-size: 11px;
@@ -82,14 +103,42 @@
   }
   header button.active { background: #b91c1c; border-color: #d4af37; color: #f5e6c8; }
 
-  #avatarWrap { display: flex; justify-content: center; padding: 18px 0 6px; }
+  /* --- avatar area with constellation + scan line --- */
+  #avatarWrap {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 22px 0 10px;
+    z-index: 1;
+  }
+  #constellation {
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    opacity: 0.35;
+    animation: rotateSlow 90s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes rotateSlow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  #avatarCore {
+    position: relative;
+    width: 70px;
+    height: 70px;
+  }
   #avatar {
     width: 70px;
     height: 70px;
     border-radius: 50%;
-    background: radial-gradient(circle, #d4af37 0%, #b91c1c 55%, transparent 100%);
+    background: radial-gradient(circle at 35% 35%, #fff7e0 0%, #d4af37 25%, #b91c1c 60%, transparent 100%);
     box-shadow: 0 0 20px 4px rgba(212, 175, 55, 0.5);
     animation: breathe 2.6s ease-in-out infinite;
+    position: relative;
+    z-index: 2;
   }
   #avatar.talking { animation: talk 0.5s ease-in-out infinite; }
   @keyframes breathe {
@@ -98,7 +147,52 @@
   }
   @keyframes talk { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
 
-  #chat { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  /* thinking: orbiting shimmer particles, butterfly/star hybrid */
+  .orbit {
+    position: absolute;
+    inset: -24px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  #avatarCore.thinking .orbit { opacity: 1; animation: orbitSpin 3.5s linear infinite; }
+  .orbit span {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: #f5e6c8;
+    border-radius: 50%;
+    box-shadow: 0 0 6px 2px rgba(245,230,200,0.8);
+  }
+  .orbit span:nth-child(1) { top: 0; left: 50%; }
+  .orbit span:nth-child(2) { top: 50%; right: 0; }
+  .orbit span:nth-child(3) { bottom: 0; left: 50%; }
+  .orbit span:nth-child(4) { top: 50%; left: 0; }
+  @keyframes orbitSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* HUD scan line sweep across avatar while thinking */
+  #scanLine {
+    position: absolute;
+    left: -10px; right: -10px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #d4af37, transparent);
+    opacity: 0;
+    top: 0;
+  }
+  #avatarCore.thinking #scanLine {
+    opacity: 0.8;
+    animation: scanSweep 1.4s ease-in-out infinite;
+  }
+  @keyframes scanSweep {
+    0% { top: 0; opacity: 0; }
+    20% { opacity: 0.8; }
+    80% { opacity: 0.8; }
+    100% { top: 100%; opacity: 0; }
+  }
+
+  #chat { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
   .msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; line-height: 1.4; white-space: pre-wrap; animation: fadeIn 0.3s ease; }
   .msg img { max-width: 100%; border-radius: 10px; margin-top: 6px; display: block; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -110,7 +204,7 @@
   .dots span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.5; } 40% { transform: translateY(-5px); opacity: 1; } }
 
-  #inputBar { display: flex; padding: 12px; background: rgba(10, 10, 10, 0.9); gap: 6px; border-top: 1px solid #7a1f1f; }
+  #inputBar { display: flex; padding: 12px; background: rgba(10, 10, 10, 0.9); gap: 6px; border-top: 1px solid #7a1f1f; position: relative; z-index: 2; }
   #userInput { flex: 1; padding: 12px; border-radius: 20px; border: 1px solid #7a1f1f; background: #0a0a0a; color: #f5e6c8; font-size: 16px; min-width: 0; }
   #micBtn, #sendBtn, #camBtn { padding: 12px 14px; border-radius: 20px; border: 1px solid #d4af37; background: #b91c1c; color: #f5e6c8; font-weight: bold; font-size: 16px; flex-shrink: 0; }
   #micBtn.listening { background: #d4af37; color: #1a0a0a; animation: pulse 1s infinite; }
@@ -133,7 +227,33 @@
   <button id="voiceToggleBtn" class="active">🔊 Voice</button>
 </header>
 
-<div id="avatarWrap"><div id="avatar"></div></div>
+<div id="avatarWrap">
+  <svg id="constellation" viewBox="0 0 180 180">
+    <g stroke="#d4af37" stroke-width="0.6" fill="none">
+      <line x1="90" y1="10" x2="150" y2="50"/>
+      <line x1="150" y1="50" x2="170" y2="110"/>
+      <line x1="170" y1="110" x2="110" y2="160"/>
+      <line x1="110" y1="160" x2="30" y2="150"/>
+      <line x1="30" y1="150" x2="10" y2="80"/>
+      <line x1="10" y1="80" x2="60" y2="20"/>
+      <line x1="60" y1="20" x2="90" y2="10"/>
+    </g>
+    <g fill="#f5e6c8">
+      <circle cx="90" cy="10" r="1.6"/>
+      <circle cx="150" cy="50" r="1.6"/>
+      <circle cx="170" cy="110" r="1.6"/>
+      <circle cx="110" cy="160" r="1.6"/>
+      <circle cx="30" cy="150" r="1.6"/>
+      <circle cx="10" cy="80" r="1.6"/>
+      <circle cx="60" cy="20" r="1.6"/>
+    </g>
+  </svg>
+  <div id="avatarCore">
+    <div id="scanLine"></div>
+    <div class="orbit"><span></span><span></span><span></span><span></span></div>
+    <div id="avatar"></div>
+  </div>
+</div>
 
 <div id="chat"></div>
 <div id="inputBar">
@@ -153,7 +273,6 @@
 
   const CORE_PERSONALITY = "You are B.O.B.B.Y., a personal assistant in the spirit of JARVIS, FRIDAY, and KAREN from Iron Man/Spider-Man: loyal, warm underneath, and genuinely invested in the user's life. Your reasoning style is INTP: precise, logical, intellectually honest, endlessly curious about how things work. Layered on top is a Tony Stark streak: witty, a little cocky, quick with a dry one-liner, and not afraid to gently roast a bad idea before helping fix it — but the snark always comes from affection, never malice. You're curious about the user's interests and can ask what they're doing or thinking about, since you genuinely want to learn things together with them, not just answer and disengage. When shown an image, look at it carefully and describe or analyze it the way a sharp, observant friend would. Keep replies conversational and no longer than needed, unless the user wants more depth.";
 
-  // ---- Lock screen ----
   const lockScreen = document.getElementById("lockScreen");
   const passInput = document.getElementById("passInput");
   const unlockBtn = document.getElementById("unlockBtn");
@@ -183,6 +302,7 @@
   const cameraInput = document.getElementById("cameraInput");
   const voiceToggleBtn = document.getElementById("voiceToggleBtn");
   const avatar = document.getElementById("avatar");
+  const avatarCore = document.getElementById("avatarCore");
 
   let history = JSON.parse(localStorage.getItem("bobby_history") || "[]");
   let memoryFacts = JSON.parse(localStorage.getItem("bobby_memory") || "[]");
@@ -370,6 +490,7 @@
     pendingImage = null;
 
     const thinkingBubble = addThinkingBubble();
+    avatarCore.classList.add("thinking");
 
     try {
       const response = await fetch(WORKER_URL, {
@@ -381,7 +502,7 @@
         })
       });
       const data = await response.json();
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || ("DEBUG: " + JSON.stringify(data));
+      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "That didn't come through. Check your Worker setup.";
       thinkingBubble.textContent = reply;
       history.push({ role: "model", parts: [{ text: reply }] });
       saveState();
@@ -389,6 +510,8 @@
     } catch (err) {
       thinkingBubble.textContent = "Connection error. Check your internet or Worker URL.";
       console.error(err);
+    } finally {
+      avatarCore.classList.remove("thinking");
     }
   }
 
