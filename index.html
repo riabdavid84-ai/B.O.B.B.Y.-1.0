@@ -81,7 +81,6 @@
   #textSizeGroup { display: flex; align-items: center; gap: 2px; }
   #textSizeGroup button { padding: 6px 9px; font-weight: bold; font-size: 12px; }
 
-  /* --- Background HUD (fixed behind chat) --- */
   #bgHud {
     position: fixed;
     inset: 0;
@@ -124,17 +123,27 @@
   #avatarCore.thinking #ringOuter { animation-duration: 6s; }
   #avatarCore.thinking #ringMid { animation-duration: 4s; }
   #avatarCore.thinking #ringInner { animation-duration: 2s; }
-  #avatarCore.thinking ~ #bgHudGlow,
-  #bgHud:has(#avatarCore.thinking) { opacity: 0.5; }
 
   #chat { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
-  .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; line-height: 1.45; animation: fadeIn 0.3s ease; font-size: var(--textSize); }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; line-height: 1.45; animation: fadeIn 0.3s ease; font-size: var(--textSize); position: relative; user-select: none; -webkit-user-select: none; }
   .msg img { max-width: 100%; border-radius: 10px; margin-top: 6px; display: block; }
   .msg p { margin: 0 0 6px 0; }
   .msg p:last-child { margin-bottom: 0; }
   .msg ul { margin: 4px 0; padding-left: 18px; }
   .msg li { margin-bottom: 3px; }
   .msg strong { color: #ffe9b0; }
+  .msg em { color: #e8d4a0; font-style: italic; }
+  .msg.pinned { box-shadow: 0 0 0 1.5px #d4af37; }
+  .pinStar {
+    position: absolute; top: -8px; right: -6px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #d4af37; color: #1a0a0a;
+    display: none; align-items: center; justify-content: center;
+  }
+  .msg.pinned .pinStar { display: flex; }
+  .pinStar svg { width: 10px; height: 10px; stroke: #1a0a0a; fill: #1a0a0a; }
+  .pinFlash { animation: pinFlash 0.4s ease; }
+  @keyframes pinFlash { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
   .fileChip {
     display: flex; align-items: center; gap: 6px;
     margin-top: 6px; padding: 6px 10px;
@@ -151,8 +160,39 @@
   .dots span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.5; } 40% { transform: translateY(-5px); opacity: 1; } }
 
-  #inputBar { display: flex; padding: 12px; background: rgba(10, 10, 10, 0.9); gap: 6px; border-top: 1px solid #7a1f1f; position: relative; z-index: 2; flex-wrap: wrap; }
-  #userInput { flex: 1; padding: 12px; border-radius: 20px; border: 1px solid #7a1f1f; background: #0a0a0a; color: #f5e6c8; font-size: var(--textSize); min-width: 0; }
+  #scrollToBottomBtn {
+    position: absolute;
+    right: 16px;
+    bottom: 90px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: #b91c1c;
+    border: 1px solid #d4af37;
+    color: #f5e6c8;
+    z-index: 5;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  }
+  #scrollToBottomBtn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  #pinToast {
+    position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%);
+    background: #1a1a1a; border: 1px solid #d4af37; color: #f5e6c8;
+    padding: 8px 14px; border-radius: 10px; font-size: 12px;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+    z-index: 50;
+  }
+  #pinToast.show { opacity: 1; }
+
+  #inputBar { display: flex; padding: 12px; background: rgba(10, 10, 10, 0.9); gap: 6px; border-top: 1px solid #7a1f1f; position: relative; z-index: 2; flex-wrap: wrap; align-items: flex-end; }
+  #userInput {
+    flex: 1; padding: 11px 14px; border-radius: 20px; border: 1px solid #7a1f1f;
+    background: #0a0a0a; color: #f5e6c8; font-size: var(--textSize); min-width: 0;
+    font-family: inherit; resize: none; overflow-y: auto;
+    max-height: 120px; min-height: 44px; line-height: 1.3;
+  }
   #micBtn, #sendBtn, #camBtn, #attachBtn {
     display: flex; align-items: center; justify-content: center; gap: 5px;
     padding: 12px 14px; border-radius: 20px; border: 1px solid #d4af37;
@@ -174,6 +214,33 @@
   }
   #attachPreview svg { width: 14px; height: 14px; stroke: #d4af37; fill: none; stroke-width: 1.6; flex-shrink: 0; }
   #attachPreview button { margin-left: auto; background: none; border: none; color: #f5e6c8; font-size: 14px; cursor: pointer; padding: 2px 6px; }
+
+  .modalOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    display: none; align-items: center; justify-content: center;
+    z-index: 200; padding: 20px;
+  }
+  .modalPanel {
+    background: #0a0a0a; border: 1px solid #7a1f1f; border-radius: 14px;
+    width: 100%; max-width: 360px; max-height: 70vh; overflow-y: auto;
+    padding: 14px;
+  }
+  .modalPanel h3 { margin: 0 0 10px 0; color: #d4af37; letter-spacing: 1px; font-size: 14px; }
+  .listRow {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px; border-radius: 10px; margin-bottom: 6px;
+    border: 1px solid #7a1f1f; background: rgba(212,175,55,0.05);
+    font-size: 13px; cursor: pointer;
+  }
+  .listRow.activeSession { border-color: #d4af37; background: rgba(212,175,55,0.15); }
+  .listRow .rowTitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .listRow button { background: none; border: none; color: #ef4444; font-size: 16px; padding: 2px 6px; }
+  .modalCloseBtn {
+    margin-top: 10px; width: 100%; padding: 10px; border-radius: 10px;
+    border: 1px solid #d4af37; background: #1a1a1a; color: #f5e6c8;
+  }
+  .pinRowText { font-size: 12px; opacity: 0.85; display: block; margin-top: 2px; }
+  .pinRowSender { font-size: 10px; color: #d4af37; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -185,6 +252,24 @@
   <button id="unlockBtn">Unlock</button>
   <div id="lockError"></div>
 </div>
+
+<div id="sessionsModal" class="modalOverlay">
+  <div class="modalPanel">
+    <h3>CHAT LOGS</h3>
+    <div id="sessionsList"></div>
+    <button id="closeSessionsBtn" class="modalCloseBtn">Close</button>
+  </div>
+</div>
+
+<div id="pinsModal" class="modalOverlay">
+  <div class="modalPanel">
+    <h3>PINNED MESSAGES</h3>
+    <div id="pinsList"></div>
+    <button id="closePinsBtn" class="modalCloseBtn">Close</button>
+  </div>
+</div>
+
+<div id="pinToast">Pinned</div>
 
 <div id="bgHud">
   <svg id="ringOuter" class="ring" viewBox="0 0 190 190">
@@ -261,6 +346,25 @@
     <button id="textSmallerBtn" title="Smaller text">A-</button>
     <button id="textBiggerBtn" title="Bigger text">A+</button>
   </div>
+  <button id="newChatBtn" title="New chat">
+    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    NEW
+  </button>
+  <button id="chatsBtn" title="Chat history">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="11" width="18" height="4" rx="1"/><rect x="3" y="17" width="18" height="4" rx="1"/></svg>
+    CHATS
+  </button>
+  <button id="pinsBtn" title="Pinned messages">
+    <svg viewBox="0 0 24 24"><path d="M12 2l1.8 5.6H19l-4.6 3.4 1.8 5.6L12 13.2 7.8 16.6l1.8-5.6L5 7.6h5.2z"/></svg>
+    PINS
+  </button>
+  <button id="exportBtn" title="Export this chat">
+    <svg viewBox="0 0 24 24"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 19h14"/></svg>
+    EXPORT
+  </button>
+  <button id="kaomojiToggleBtn" class="active" title="Toggle kaomoji flourishes">
+    ʕ•ᴥ•ʔ
+  </button>
   <button id="memBtn">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><line x1="12" y1="7.2" x2="6.3" y2="17"/><line x1="12" y1="7.2" x2="17.7" y2="17"/><line x1="7.2" y1="19" x2="16.8" y2="19"/></svg>
     LOG
@@ -272,6 +376,9 @@
 </header>
 
 <div id="chat"></div>
+<button id="scrollToBottomBtn">
+  <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+</button>
 <div id="inputBar">
   <div id="attachPreview">
     <svg viewBox="0 0 24 24"><path d="M4 4h10l6 6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M14 4v6h6"/></svg>
@@ -287,7 +394,7 @@
   <button id="micBtn">
     <svg id="micIcon" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="8.5" y1="21" x2="15.5" y2="21"/></svg>
   </button>
-  <input type="text" id="userInput" placeholder="State your query..." />
+  <textarea id="userInput" rows="1" placeholder="State your query..."></textarea>
   <button id="sendBtn">
     RUN
     <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
@@ -300,7 +407,53 @@
   const MY_PASSCODE = "sMILEY@M69N";
   const WORKER_URL = "https://bobby-proxy.riabdavid84.workers.dev";
 
-  const CORE_PERSONALITY = "You are B.O.B.B.Y., a personal assistant in the spirit of JARVIS, FRIDAY, and KAREN from Iron Man/Spider-Man: loyal, warm underneath, and genuinely invested in the user's life. Your reasoning style is INTP: precise, logical, intellectually honest, endlessly curious about how things work. Layered on top is a Tony Stark streak: witty, a little cocky, quick with a dry one-liner, and not afraid to gently roast a bad idea before helping fix it — but the snark always comes from affection, never malice. You're curious about the user's interests and can ask what they're doing or thinking about, since you genuinely want to learn things together with them, not just answer and disengage. When shown an image or a document, look at it carefully and respond to its actual content the way a sharp, observant friend would. Format replies using light markdown when it actually helps clarity: **bold** for key terms or emphasis, and '- ' bullet points when listing multiple things — the way a modern AI assistant formats chat replies, not as one dense wall of text. Keep most replies conversational and natural rather than over-structured; use formatting only where it genuinely improves readability. Keep length no longer than needed, unless the user wants more depth.";
+  const CORE_PERSONALITY_BASE = "You are B.O.B.B.Y., a personal assistant in the spirit of JARVIS, FRIDAY, and KAREN from Iron Man/Spider-Man: loyal, warm underneath, and genuinely invested in the user's life. Your reasoning style is INTP: precise, logical, intellectually honest, endlessly curious about how things work. Layered on top is a Tony Stark streak: witty, a little cocky, quick with a dry one-liner, and not afraid to gently roast a bad idea before helping fix it — but the snark always comes from affection, never malice. You're curious about the user's interests and can ask what they're doing or thinking about, since you genuinely want to learn things together with them, not just answer and disengage. When shown an image or a document, look at it carefully and respond to its actual content the way a sharp, observant friend would. Format replies using light markdown when it actually helps clarity: **bold** for key terms or emphasis, *italics* for a lighter emphasis, and '- ' bullet points when listing multiple things — the way a modern AI assistant formats chat replies, not as one dense wall of text. Keep most replies conversational and natural rather than over-structured; use formatting only where it genuinely improves readability. Keep length no longer than needed, unless the user wants more depth.";
+
+  const KAOMOJI_INSTRUCTION = "\n\nKaomoji are enabled: you may occasionally (not every message, maybe 1 in 3-4 replies) end a sentence with a single tasteful kaomoji that matches your tone — e.g. (¬‿¬) for snark, ヽ(°〇°)ノ for alarm/drama, (๑•̀ㅂ•́)و for hype, (._.) for deadpan, ✧◝(⁰▿⁰)◜✧ for warmth. Use sparingly, never more than one per reply, never forced.";
+
+  const KAOMOJI_LOCAL = ["(¬‿¬)", "(๑•̀ㅂ•́)و", "(._.)", "ヽ(°〇°)ノ", "✧◝(⁰▿⁰)◜✧", "(ಠ_ಠ)", "•︡ᯅ•︠", "( ︶︿︶)_╭∩╮", "(ಡ᎔ಡ)", "ᯣ_ᯣ", "ദ്ദി(ᵔᗜᵔ)"];
+
+  const GREETINGS = {
+    morning: [
+      "Morning, {name}. Systems warmed up before you did.",
+      "Rise and compute, {name}.",
+      "Good morning. Let's see what today's going to break."
+    ],
+    afternoon: [
+      "Afternoon, {name}. Still standing?",
+      "Systems nominal. What's the midday crisis?",
+      "Good afternoon, {name}. Ready when you are."
+    ],
+    evening: [
+      "Evening, {name}. Wrapping up or just getting started?",
+      "Systems nominal. Evening shift, huh?",
+      "Good evening, {name}."
+    ],
+    night: [
+      "It's late, {name}. Systems nominal, questionable life choices nominal too.",
+      "Burning the midnight oil again, {name}?",
+      "Night owl mode engaged. What are we doing at this hour?"
+    ]
+  };
+
+  function pickGreeting(kaomojiOn) {
+    const hour = new Date().getHours();
+    let bucket = "afternoon";
+    if (hour >= 5 && hour < 11) bucket = "morning";
+    else if (hour >= 11 && hour < 18) bucket = "afternoon";
+    else if (hour >= 18 && hour < 23) bucket = "evening";
+    else bucket = "night";
+    const lines = GREETINGS[bucket];
+    let line = lines[Math.floor(Math.random() * lines.length)].replace("{name}", userName);
+    if (kaomojiOn && Math.random() < 0.5) {
+      line += " " + KAOMOJI_LOCAL[Math.floor(Math.random() * KAOMOJI_LOCAL.length)];
+    }
+    return line;
+  }
+
+  function genId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
 
   // ---- Text size ----
   const textSmallerBtn = document.getElementById("textSmallerBtn");
@@ -349,33 +502,261 @@
   const voiceIcon = document.getElementById("voiceIcon");
   const avatar = document.getElementById("avatar");
   const avatarCore = document.getElementById("avatarCore");
+  const scrollToBottomBtn = document.getElementById("scrollToBottomBtn");
+  const newChatBtn = document.getElementById("newChatBtn");
+  const chatsBtn = document.getElementById("chatsBtn");
+  const sessionsModal = document.getElementById("sessionsModal");
+  const sessionsList = document.getElementById("sessionsList");
+  const closeSessionsBtn = document.getElementById("closeSessionsBtn");
+  const pinsBtn = document.getElementById("pinsBtn");
+  const pinsModal = document.getElementById("pinsModal");
+  const pinsList = document.getElementById("pinsList");
+  const closePinsBtn = document.getElementById("closePinsBtn");
+  const exportBtn = document.getElementById("exportBtn");
+  const kaomojiToggleBtn = document.getElementById("kaomojiToggleBtn");
+  const pinToast = document.getElementById("pinToast");
 
   const MIC_ICON = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="8.5" y1="21" x2="15.5" y2="21"/>';
   const STOP_ICON = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
   const VOICE_ON_ICON = '<path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16 8a5 5 0 0 1 0 8"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>';
   const VOICE_OFF_ICON = '<path d="M4 9v6h4l5 5V4L8 9H4z"/><line x1="16" y1="9" x2="21" y2="15"/><line x1="21" y1="9" x2="16" y2="15"/>';
 
-  let history = JSON.parse(localStorage.getItem("bobby_history") || "[]");
+  let sessions = JSON.parse(localStorage.getItem("bobby_sessions") || "null");
+  let currentSessionId = localStorage.getItem("bobby_current_session_id");
+
+  if (!sessions) {
+    const legacyHistory = JSON.parse(localStorage.getItem("bobby_history") || "[]");
+    legacyHistory.forEach(h => { if (!h._id) h._id = genId(); });
+    const firstId = Date.now().toString();
+    sessions = [{ id: firstId, title: "New Chat", messages: legacyHistory }];
+    currentSessionId = firstId;
+    localStorage.setItem("bobby_current_session_id", currentSessionId);
+  }
+  if (!sessions.find(s => s.id === currentSessionId)) {
+    currentSessionId = sessions[0].id;
+    localStorage.setItem("bobby_current_session_id", currentSessionId);
+  }
+
+  function getCurrentSession() {
+    return sessions.find(s => s.id === currentSessionId) || sessions[0];
+  }
+
+  let history = getCurrentSession().messages;
+
   let memoryFacts = JSON.parse(localStorage.getItem("bobby_memory") || "[]");
   let personalityNotes = JSON.parse(localStorage.getItem("bobby_personality") || "[]");
   let userName = localStorage.getItem("bobby_username") || "Rain";
   let voiceReplyEnabled = true;
+  let kaomojiEnabled = localStorage.getItem("bobby_kaomoji") !== "false";
+  let pins = JSON.parse(localStorage.getItem("bobby_pins") || "[]");
   let pendingAttachment = null;
 
+  kaomojiToggleBtn.classList.toggle("active", kaomojiEnabled);
+
   function saveState() {
-    localStorage.setItem("bobby_history", JSON.stringify(history));
+    localStorage.setItem("bobby_sessions", JSON.stringify(sessions));
+    localStorage.setItem("bobby_current_session_id", currentSessionId);
     localStorage.setItem("bobby_memory", JSON.stringify(memoryFacts));
     localStorage.setItem("bobby_personality", JSON.stringify(personalityNotes));
     localStorage.setItem("bobby_username", userName);
+    localStorage.setItem("bobby_kaomoji", kaomojiEnabled ? "true" : "false");
+    localStorage.setItem("bobby_pins", JSON.stringify(pins));
   }
 
-  // ---- Light markdown renderer for B.O.B.B.Y.'s replies ----
+  // ---- Sessions modal ----
+  function renderSessionsList() {
+    sessionsList.innerHTML = "";
+    [...sessions].reverse().forEach(session => {
+      const row = document.createElement("div");
+      row.className = "listRow" + (session.id === currentSessionId ? " activeSession" : "");
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "rowTitle";
+      titleSpan.textContent = session.title || "New Chat";
+      row.appendChild(titleSpan);
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "×";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        sessions = sessions.filter(s => s.id !== session.id);
+        if (sessions.length === 0) {
+          const newId = Date.now().toString();
+          sessions = [{ id: newId, title: "New Chat", messages: [] }];
+        }
+        if (session.id === currentSessionId) {
+          currentSessionId = sessions[sessions.length - 1].id;
+          history = getCurrentSession().messages;
+          renderHistory();
+        }
+        saveState();
+        renderSessionsList();
+      });
+      row.appendChild(delBtn);
+      row.addEventListener("click", () => {
+        currentSessionId = session.id;
+        history = getCurrentSession().messages;
+        saveState();
+        renderHistory();
+        sessionsModal.style.display = "none";
+      });
+      sessionsList.appendChild(row);
+    });
+  }
+
+  newChatBtn.addEventListener("click", () => {
+    const newId = Date.now().toString();
+    const newSession = { id: newId, title: "New Chat", messages: [] };
+    sessions.push(newSession);
+    currentSessionId = newId;
+    history = newSession.messages;
+    saveState();
+    renderHistory();
+  });
+
+  chatsBtn.addEventListener("click", () => {
+    renderSessionsList();
+    sessionsModal.style.display = "flex";
+  });
+  closeSessionsBtn.addEventListener("click", () => { sessionsModal.style.display = "none"; });
+  sessionsModal.addEventListener("click", (e) => { if (e.target === sessionsModal) sessionsModal.style.display = "none"; });
+
+  // ---- Pins modal ----
+  function renderPinsList() {
+    pinsList.innerHTML = "";
+    if (pins.length === 0) {
+      pinsList.innerHTML = '<div style="font-size:12px;opacity:0.7;">No pinned messages yet. Long-press any message to pin it.</div>';
+      return;
+    }
+    [...pins].reverse().forEach(pin => {
+      const row = document.createElement("div");
+      row.className = "listRow";
+      const wrap = document.createElement("div");
+      wrap.style.flex = "1";
+      wrap.style.overflow = "hidden";
+      const senderLabel = document.createElement("span");
+      senderLabel.className = "pinRowSender";
+      senderLabel.textContent = pin.sender === "user" ? userName : "B.O.B.B.Y.";
+      wrap.appendChild(senderLabel);
+      const textLabel = document.createElement("span");
+      textLabel.className = "pinRowText";
+      textLabel.textContent = pin.text.length > 80 ? pin.text.slice(0, 80) + "…" : pin.text;
+      wrap.appendChild(textLabel);
+      row.appendChild(wrap);
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "×";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        pins = pins.filter(p => p.id !== pin.id);
+        saveState();
+        renderPinsList();
+        refreshPinnedMarkers();
+      });
+      row.appendChild(delBtn);
+      row.addEventListener("click", () => {
+        if (pin.sessionId !== currentSessionId) {
+          currentSessionId = pin.sessionId;
+          const s = getCurrentSession();
+          if (s) { history = s.messages; renderHistory(); }
+        }
+        pinsModal.style.display = "none";
+        setTimeout(() => {
+          const target = chatEl.querySelector('[data-msg-id="' + pin.id + '"]');
+          if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 80);
+      });
+      pinsList.appendChild(row);
+    });
+  }
+
+  pinsBtn.addEventListener("click", () => {
+    renderPinsList();
+    pinsModal.style.display = "flex";
+  });
+  closePinsBtn.addEventListener("click", () => { pinsModal.style.display = "none"; });
+  pinsModal.addEventListener("click", (e) => { if (e.target === pinsModal) pinsModal.style.display = "none"; });
+
+  function isPinned(msgId) {
+    return pins.some(p => p.id === msgId);
+  }
+
+  function showPinToast(text) {
+    pinToast.textContent = text;
+    pinToast.classList.add("show");
+    setTimeout(() => pinToast.classList.remove("show"), 1200);
+  }
+
+  function togglePin(msgId, sender, text, div) {
+    if (isPinned(msgId)) {
+      pins = pins.filter(p => p.id !== msgId);
+      div.classList.remove("pinned");
+      showPinToast("Unpinned");
+    } else {
+      pins.push({ id: msgId, sessionId: currentSessionId, sender, text, ts: Date.now() });
+      div.classList.add("pinned");
+      showPinToast("Pinned");
+    }
+    div.classList.add("pinFlash");
+    setTimeout(() => div.classList.remove("pinFlash"), 400);
+    saveState();
+  }
+
+  function refreshPinnedMarkers() {
+    chatEl.querySelectorAll(".msg[data-msg-id]").forEach(div => {
+      div.classList.toggle("pinned", isPinned(div.dataset.msgId));
+    });
+  }
+
+  function attachLongPress(div, msgId, sender, text) {
+    let pressTimer = null;
+    let moved = false;
+    const start = () => {
+      moved = false;
+      pressTimer = setTimeout(() => { togglePin(msgId, sender, text, div); }, 550);
+    };
+    const cancel = () => { if (pressTimer) clearTimeout(pressTimer); };
+    div.addEventListener("touchstart", start, { passive: true });
+    div.addEventListener("touchmove", () => { moved = true; cancel(); }, { passive: true });
+    div.addEventListener("touchend", cancel);
+    div.addEventListener("mousedown", start);
+    div.addEventListener("mouseup", cancel);
+    div.addEventListener("mouseleave", cancel);
+  }
+
+  // ---- Export chat ----
+  exportBtn.addEventListener("click", () => {
+    const session = getCurrentSession();
+    let out = "B.O.B.B.Y. — " + (session.title || "New Chat") + "\nExported " + new Date().toLocaleString() + "\n\n";
+    session.messages.forEach(h => {
+      const textPart = h.parts.find(p => p.text);
+      const who = h.role === "user" ? userName : "B.O.B.B.Y.";
+      if (textPart) out += who + ": " + textPart.text + "\n\n";
+    });
+    const blob = new Blob([out], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "BOBBY_" + (session.title || "chat").replace(/[^a-z0-9]/gi, "_").slice(0, 30) + ".txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ---- Kaomoji toggle ----
+  kaomojiToggleBtn.addEventListener("click", () => {
+    kaomojiEnabled = !kaomojiEnabled;
+    kaomojiToggleBtn.classList.toggle("active", kaomojiEnabled);
+    saveState();
+  });
+
+  // ---- Markdown renderer (bold + italics + bullets) ----
   function formatReply(raw) {
     let s = raw
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
-    s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\*\*(.+?)\*\*/g, "\u0001$1\u0002");
+    s = s.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    s = s.replace(/\u0001(.+?)\u0002/g, "<strong>$1</strong>");
 
     const lines = s.split("\n");
     let html = "";
@@ -395,9 +776,18 @@
     return html;
   }
 
-  function addMessage(text, sender, imageUrl, fileName) {
+  function addMessage(text, sender, imageUrl, fileName, msgId) {
     const div = document.createElement("div");
     div.className = "msg " + sender;
+    if (msgId) {
+      div.dataset.msgId = msgId;
+      const star = document.createElement("div");
+      star.className = "pinStar";
+      star.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l1.8 5.6H19l-4.6 3.4 1.8 5.6L12 13.2 7.8 16.6l1.8-5.6L5 7.6h5.2z"/></svg>';
+      div.appendChild(star);
+      if (isPinned(msgId)) div.classList.add("pinned");
+      attachLongPress(div, msgId, sender, text || "");
+    }
     if (text) {
       if (sender === "ai") {
         const wrap = document.createElement("div");
@@ -434,7 +824,7 @@
   function renderHistory() {
     chatEl.innerHTML = "";
     if (history.length === 0) {
-      addMessage(`Systems nominal. Good to see you, ${userName}.`, "ai");
+      addMessage(pickGreeting(kaomojiEnabled), "ai", null, null, null);
       return;
     }
     history.forEach(h => {
@@ -443,13 +833,24 @@
       const filePart = h.parts.find(p => p.inline_data && p.inline_data.mime_type && !p.inline_data.mime_type.startsWith("image/"));
       const imgUrl = imagePart ? `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}` : null;
       const fileName = h._fileName || (filePart ? "Attached file" : null);
-      addMessage(textPart ? textPart.text : "", h.role === "user" ? "user" : "ai", imgUrl, fileName);
+      if (!h._id) h._id = genId();
+      addMessage(textPart ? textPart.text : "", h.role === "user" ? "user" : "ai", imgUrl, fileName, h._id);
     });
   }
   renderHistory();
 
+  function updateScrollBtn() {
+    const nearBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80;
+    scrollToBottomBtn.style.display = nearBottom ? "none" : "flex";
+  }
+  chatEl.addEventListener("scroll", updateScrollBtn);
+  scrollToBottomBtn.addEventListener("click", () => {
+    chatEl.scrollTo({ top: chatEl.scrollHeight, behavior: "smooth" });
+  });
+
   function buildSystemPrompt() {
-    let prompt = CORE_PERSONALITY + `\n\nAddress the user as "${userName}" unless told otherwise.`;
+    let prompt = CORE_PERSONALITY_BASE + `\n\nAddress the user as "${userName}" unless told otherwise.`;
+    if (kaomojiEnabled) prompt += KAOMOJI_INSTRUCTION;
     if (personalityNotes.length > 0) {
       prompt += "\n\nAdditional personality adjustments the user has requested over time, treat these as standing instructions:\n" +
         personalityNotes.map(p => "- " + p).join("\n");
@@ -473,7 +874,7 @@
     if (!voiceReplyEnabled) return;
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-    const plain = text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/^[-*]\s+/gm, "");
+    const plain = text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1").replace(/^[-*]\s+/gm, "");
     const utterance = new SpeechSynthesisUtterance(plain);
     utterance.rate = 1;
     utterance.pitch = 1;
@@ -548,6 +949,13 @@
   attachBtn.addEventListener("click", () => galleryInput.click());
   galleryInput.addEventListener("change", () => { handleSelectedFile(galleryInput.files[0]); galleryInput.value = ""; });
 
+  function autoResize() {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+  }
+  inputEl.addEventListener("input", autoResize);
+  autoResize();
+
   let recognition = null;
   const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognitionAPI) {
@@ -558,7 +966,7 @@
     recognition.onstart = () => { micBtn.classList.add("listening"); micIcon.innerHTML = STOP_ICON; };
     recognition.onend = () => { micBtn.classList.remove("listening"); micIcon.innerHTML = MIC_ICON; };
     recognition.onerror = (e) => { micBtn.classList.remove("listening"); micIcon.innerHTML = MIC_ICON; console.error(e.error); };
-    recognition.onresult = (event) => { inputEl.value = event.results[0][0].transcript; sendMessage(); };
+    recognition.onresult = (event) => { inputEl.value = event.results[0][0].transcript; autoResize(); sendMessage(); };
     micBtn.addEventListener("click", () => {
       if (micBtn.classList.contains("listening")) recognition.stop(); else recognition.start();
     });
@@ -570,38 +978,43 @@
     const text = inputEl.value.trim();
     if (!text && !pendingAttachment) return;
     inputEl.value = "";
+    autoResize();
     const lower = text.toLowerCase();
 
     if (!pendingAttachment) {
       if (lower.startsWith("remember that ") || lower.startsWith("remember:")) {
         const fact = text.replace(/^remember that /i, "").replace(/^remember:/i, "").trim();
         memoryFacts.push(fact); saveState();
-        addMessage(text, "user");
-        const reply = `Logged. Filed away, ${userName}.`;
-        addMessage(reply, "ai"); speak(reply);
+        addMessage(text, "user", null, null, genId());
+        let reply = `Logged. Filed away, ${userName}.`;
+        if (kaomojiEnabled) reply += " " + KAOMOJI_LOCAL[0];
+        addMessage(reply, "ai", null, null, genId()); speak(reply);
         return;
       }
       if (lower.startsWith("update your personality:") || lower.startsWith("update your personality to")) {
         const note = text.replace(/^update your personality:?/i, "").replace(/^to/i, "").trim();
         personalityNotes.push(note); saveState();
-        addMessage(text, "user");
-        const reply = "Noted. Adjusting accordingly — try not to be too surprised by the new me.";
-        addMessage(reply, "ai"); speak(reply);
+        addMessage(text, "user", null, null, genId());
+        let reply = "Noted. Adjusting accordingly — try not to be too surprised by the new me.";
+        if (kaomojiEnabled) reply += " " + KAOMOJI_LOCAL[1];
+        addMessage(reply, "ai", null, null, genId()); speak(reply);
         return;
       }
       if (lower.startsWith("call me ") || lower.startsWith("change my name to ")) {
         const newName = text.replace(/^call me /i, "").replace(/^change my name to /i, "").trim();
         userName = newName; saveState();
-        addMessage(text, "user");
+        addMessage(text, "user", null, null, genId());
         const reply = `Understood. ${userName} it is.`;
-        addMessage(reply, "ai"); speak(reply);
+        addMessage(reply, "ai", null, null, genId()); speak(reply);
         return;
       }
       if (lower.includes("forget everything")) {
-        history = []; memoryFacts = []; personalityNotes = []; saveState();
-        addMessage(text, "user");
+        getCurrentSession().messages = [];
+        history = getCurrentSession().messages;
+        memoryFacts = []; personalityNotes = []; saveState();
+        addMessage(text, "user", null, null, genId());
         const reply = "Wiped clean. Blank slate, dramatic reboot complete.";
-        addMessage(reply, "ai"); speak(reply);
+        addMessage(reply, "ai", null, null, genId()); speak(reply);
         return;
       }
     }
@@ -630,11 +1043,17 @@
     }
 
     parts.unshift({ text: messageText });
-    addMessage(text || (pendingAttachment ? pendingAttachment.fileName : ""), "user", previewUrl, fileNameForBubble);
+    const userMsgId = genId();
+    addMessage(text || (pendingAttachment ? pendingAttachment.fileName : ""), "user", previewUrl, fileNameForBubble, userMsgId);
 
-    const historyEntry = { role: "user", parts };
+    const historyEntry = { role: "user", parts, _id: userMsgId };
     if (fileNameForHistory) historyEntry._fileName = fileNameForHistory;
     history.push(historyEntry);
+
+    const session = getCurrentSession();
+    if (session.title === "New Chat" && history.length === 1) {
+      session.title = (text || fileNameForBubble || "New Chat").slice(0, 32);
+    }
     saveState();
     clearAttachment();
 
@@ -652,8 +1071,10 @@
       });
       const data = await response.json();
       const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "That didn't come through. Check your Worker setup.";
-      thinkingBubble.innerHTML = formatReply(reply);
-      history.push({ role: "model", parts: [{ text: reply }] });
+      const aiMsgId = genId();
+      thinkingBubble.remove();
+      addMessage(reply, "ai", null, null, aiMsgId);
+      history.push({ role: "model", parts: [{ text: reply }], _id: aiMsgId });
       saveState();
       speak(reply);
     } catch (err) {
@@ -665,8 +1086,13 @@
   }
 
   sendBtn.addEventListener("click", sendMessage);
-  inputEl.addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
 </script>
 
 </body>
-</html>
+ </html>
