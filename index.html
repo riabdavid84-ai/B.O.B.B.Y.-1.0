@@ -857,12 +857,26 @@
   const passInput = document.getElementById("passInput");
   const unlockBtn = document.getElementById("unlockBtn");
   const lockError = document.getElementById("lockError");
-  function tryUnlock() {
-    if (passInput.value === MY_PASSCODE) {
-      lockScreen.style.display = "none";
-      sessionStorage.setItem("bobby_unlocked", "true");
-    } else {
-      lockError.textContent = "Incorrect passcode.";
+  async function tryUnlock() {
+    const attempt = passInput.value;
+    lockError.textContent = "Checking...";
+    try {
+      const r = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-bobby-pass": attempt },
+        body: JSON.stringify({ ping: true })
+      });
+      if (r.ok) {
+        sessionStorage.setItem("bobby_pass", attempt);
+        sessionStorage.setItem("bobby_unlocked", "true");
+        lockScreen.style.display = "none";
+        lockError.textContent = "";
+        passInput.value = "";
+      } else {
+        lockError.textContent = "Incorrect passcode.";
+      }
+    } catch (e) {
+      lockError.textContent = "Can't reach the server. Check your internet.";
     }
   }
   unlockBtn.addEventListener("click", tryUnlock);
@@ -2403,12 +2417,18 @@
     try {
       const response = await fetch(WORKER_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-bobby-pass": sessionStorage.getItem("bobby_pass") || "" },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: buildSystemPrompt() }] },
           contents: history.map(h => ({ role: h.role, parts: h.parts }))
         })
       });
+           if (response.status === 401) {
+        sessionStorage.removeItem("bobby_unlocked");
+        sessionStorage.removeItem("bobby_pass");
+        lockScreen.style.display = "";
+        throw new Error("locked");
+           }
       const data = await response.json();
       const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "That didn't come through. Check your Worker setup.";
       const aiMsgId = genId();
