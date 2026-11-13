@@ -2875,6 +2875,99 @@
   });
 })();
 </script>
+<script>
+(function () {
+  "use strict";
+  var chat = document.getElementById("chat");
+  var inputEl = document.getElementById("userInput");
+  var sendBtn = document.getElementById("sendBtn");
+  if (!chat || !inputEl || !sendBtn) return;
+
+  var CMD = /^\s*(save|summari[sz]e|remember)\s+(this|our|the)\s+(chat|conversation|convo)(\s+(to|in|into)\s+(your\s+)?memory)?\s*[.!]?\s*$/i;
+  var busy = false;
+
+  function say(text, who) { addMessage(text, who); return chat.lastElementChild; }
+
+  function transcript() {
+    var who = (typeof userName === "string" && userName) ? userName : "User";
+    var lines = [];
+    for (var i = 0; i < history.length; i++) {
+      var h = history[i], t = "";
+      (h.parts || []).forEach(function (p) { if (p && p.text) t += p.text + " "; });
+      t = t.trim();
+      if (!t) continue;
+      lines.push((h.role === "user" ? who : "Bobby") + ": " + t);
+    }
+    var s = lines.join("\n");
+    return s.length > 12000 ? s.slice(-12000) : s;
+  }
+
+  async function run(cmdText) {
+    if (busy) return;
+    busy = true;
+    say(cmdText, "user");
+    var wait = null;
+    try {
+      var tx = transcript();
+      if (tx.length < 40) { say("There is not enough in this chat to save yet.", "ai"); return; }
+      wait = say("Reading this chat...", "ai");
+
+      var prompt = "Read this conversation and extract up to 8 durable facts worth remembering about the user: their projects, goals, preferences, decisions and ongoing plans. Skip small talk and one-off questions. Write each fact as one short line under 120 characters, starting with '- '. Output only the lines, nothing else.\n\nCONVERSATION:\n" + tx;
+      var r = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-bobby-pass": sessionStorage.getItem("bobby_pass") || "" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] })
+      });
+      if (r.status === 401) throw new Error("Locked. Close and reopen the app, then enter your passcode.");
+      var data = await r.json();
+      var out = data && data.candidates && data.candidates[0] && data.candidates[0].content &&
+                data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+                data.candidates[0].content.parts[0].text;
+      if (!out) throw new Error("Error " + r.status + ": " + String((data && data.error && data.error.message) || "no reply").slice(0, 200));
+
+      var facts = out.split("\n")
+        .filter(function (l) { return /^\s*[-*\u2022]\s+/.test(l); })
+        .map(function (l) { return l.replace(/^\s*[-*\u2022]\s+/, "").trim(); })
+        .filter(function (l) { return l.length >= 5 && l.length <= 160; })
+        .slice(0, 8);
+
+      var useGlobal = (typeof memoryFacts !== "undefined") && Array.isArray(memoryFacts);
+      var store;
+      if (useGlobal) store = memoryFacts;
+      else { try { store = JSON.parse(localStorage.getItem("bobby_memory") || "[]"); } catch (e) { store = []; } }
+      var have = store.map(function (f) { return String(f).toLowerCase(); });
+      var added = facts.filter(function (f) { return have.indexOf(f.toLowerCase()) < 0; });
+      added.forEach(function (f) { store.push(f); });
+
+      if (useGlobal && typeof saveState === "function") saveState();
+      else localStorage.setItem("bobby_memory", JSON.stringify(store));
+
+      if (wait) wait.remove();
+      wait = null;
+      if (!added.length) say("Nothing new to add. I already know all of that.", "ai");
+      else say("Saved " + added.length + " thing" + (added.length > 1 ? "s" : "") + " to my memory:\n\n" +
+               added.map(function (f) { return "- " + f; }).join("\n"), "ai");
+    } catch (err) {
+      if (wait) wait.remove();
+      say(String(err && err.message ? err.message : err), "ai");
+    } finally {
+      busy = false;
+    }
+  }
+
+  function intercept(e) {
+    var v = inputEl.value;
+    if (!CMD.test(v)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    inputEl.value = "";
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    run(v.trim());
+  }
+  sendBtn.addEventListener("click", intercept, true);
+  inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) intercept(e); }, true);
+})();
+     </script>
  
 </body>
                                                                        </html>
