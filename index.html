@@ -2511,7 +2511,7 @@
   const LS = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
   const SS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
   const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return String(h); };
-  const textOf = m => m.innerText.replace(/\s+\n/g, "\n").trim();
+  const textOf = m => (m.dataset && m.dataset.raw ? m.dataset.raw : m.innerText.replace(/\s+\n/g, "\n")).trim();
   const isReal = m => m && !m.classList.contains("system") && textOf(m) !== "...";
 
   let reacts = LS("bobby_reactions", {});
@@ -2687,6 +2687,191 @@
   });
 })();
 </script>
+<script>
+(function () {
+  "use strict";
+  var FONT = "system-ui"; // change this one word to change Bobby's font
 
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  function inline(s) {
+    var codes = [];
+    s = s.replace(/`([^`\n]+)`/g, function (m, c) { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+         .replace(/__([^_\n]+)__/g, "<strong>$1</strong>")
+         .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
+         .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
+         .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    return s.replace(/\u0000(\d+)\u0000/g, function (m, i) { return "<code>" + codes[i] + "</code>"; });
+  }
+
+  var KW = "def|class|return|if|elif|else|for|while|in|import|from|as|try|except|finally|with|lambda|pass|break|continue|True|False|None|and|or|not|is|const|let|var|function|new|async|await|export|default|switch|case|do|this|null|undefined|true|false|typeof|public|private|static|void|int|float|double|char|string|bool|struct|enum|throw|catch|extends|implements|interface|package|using|namespace|include|print|raise|yield|global|del|assert";
+
+  function hl(code, lang) {
+    var s = esc(code);
+    var hashLang = /^(python|py|bash|sh|shell|zsh|yaml|yml|ruby|rb|r|toml|ini|dockerfile|)$/i.test(lang);
+    var slashLang = !/^(python|py|bash|sh|shell|zsh|yaml|yml|ruby|rb|toml|ini|)$/i.test(lang);
+    var parts = [];
+    if (slashLang) parts.push("\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/");
+    if (hashLang) parts.push("#[^\\n]*");
+    var comment = parts.length ? parts.join("|") : "(?!)";
+    var re = new RegExp(
+      "(" + comment + ")|(\"(?:[^\"\\\\\\n]|\\\\.)*\"|'(?:[^'\\\\\\n]|\\\\.)*'|`(?:[^`\\\\]|\\\\.)*`)|(\\b\\d+(?:\\.\\d+)?\\b)|(\\b(?:" + KW + ")\\b)",
+      "g"
+    );
+    return s.replace(re, function (m, c, str, n) {
+      var cls = c ? "hc" : str ? "hs" : n ? "hn" : "hk";
+      return '<span class="' + cls + '">' + m + "</span>";
+    });
+  }
+
+  function codeBlock(code, lang) {
+    return '<div class="bm-code"><div class="bm-codehead"><span>' + esc(lang || "code") +
+      '</span><button type="button" class="bm-copy">Copy</button></div><pre><code>' + hl(code, lang || "") + "</code></pre></div>";
+  }
+
+  var LI = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+  var HR = /^\s*([-*_])(\s*\1){2,}\s*$/;
+  var TSEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+  function cells(r) { return r.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); }); }
+
+  function render(md) {
+    var lines = md.replace(/\r/g, "").split("\n"), out = [], i = 0;
+    while (i < lines.length) {
+      var ln = lines[i], m;
+      if ((m = ln.match(/^\s*```\s*([\w+#.-]*)\s*$/))) {
+        var lang = m[1] || "", buf = [];
+        i++;
+        while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+        i++;
+        out.push(codeBlock(buf.join("\n"), lang));
+        continue;
+      }
+      if (!ln.trim()) { i++; continue; }
+      if (HR.test(ln)) { out.push("<hr>"); i++; continue; }
+      if ((m = ln.match(/^(#{1,6})\s+(.*)$/))) {
+        var lv = Math.min(m[1].length, 4);
+        out.push("<h" + lv + ">" + inline(esc(m[2])) + "</h" + lv + ">");
+        i++; continue;
+      }
+      if (ln.indexOf("|") > -1 && i + 1 < lines.length && TSEP.test(lines[i + 1])) {
+        var head = cells(ln), rows = [];
+        i += 2;
+        while (i < lines.length && lines[i].trim() && lines[i].indexOf("|") > -1) { rows.push(cells(lines[i])); i++; }
+        out.push('<div class="bm-tbl"><table><thead><tr>' +
+          head.map(function (c) { return "<th>" + inline(esc(c)) + "</th>"; }).join("") +
+          "</tr></thead><tbody>" +
+          rows.map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + inline(esc(c)) + "</td>"; }).join("") + "</tr>"; }).join("") +
+          "</tbody></table></div>");
+        continue;
+      }
+      if (/^\s*>/.test(ln)) {
+        var q = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+        out.push("<blockquote>" + inline(esc(q.join("\n"))).replace(/\n/g, "<br>") + "</blockquote>");
+        continue;
+      }
+      if (LI.test(ln)) {
+        var ordered = /\d/.test(ln.match(LI)[2]), items = [];
+        while (i < lines.length && (m = lines[i].match(LI)) && /\d/.test(m[2]) === ordered) { items.push({ ind: m[1].length, t: m[3] }); i++; }
+        out.push("<" + (ordered ? "ol" : "ul") + ">" + items.map(function (it) {
+          return '<li style="margin-left:' + Math.min(it.ind, 8) * 6 + 'px">' + inline(esc(it.t)) + "</li>";
+        }).join("") + "</" + (ordered ? "ol" : "ul") + ">");
+        continue;
+      }
+      var p = [ln];
+      i++;
+      while (i < lines.length && lines[i].trim() && !/^\s*```/.test(lines[i]) && !/^#{1,6}\s/.test(lines[i]) &&
+             !LI.test(lines[i]) && !/^\s*>/.test(lines[i]) && !HR.test(lines[i])) { p.push(lines[i]); i++; }
+      out.push("<p>" + inline(esc(p.join("\n"))).replace(/\n/g, "<br>") + "</p>");
+    }
+    return out.join("");
+  }
+
+  var chat = document.getElementById("chat");
+  if (!chat) return;
+
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(FONT).replace(/%20/g, "+") + ":wght@400;600;700&display=swap";
+  document.head.appendChild(link);
+
+  var style = document.createElement("style");
+  style.textContent =
+    ":root{--bobby-font:'" + FONT + "','Orbitron',sans-serif}" +
+    ".msg,#userInput{font-family:var(--bobby-font)}" +
+    ".msg.ai.bm-rich{background:transparent!important;border:0!important;box-shadow:none!important;max-width:100%!important;width:100%;padding:2px 2px 6px!important;white-space:normal!important}" +
+    ".bm-md{line-height:1.65;word-break:break-word}" +
+    ".bm-md>*:first-child{margin-top:0}.bm-md>*:last-child{margin-bottom:0}" +
+    ".bm-md p{margin:0 0 .85em}" +
+    ".bm-md h1,.bm-md h2,.bm-md h3,.bm-md h4{color:#f2d06b;line-height:1.3;margin:1.2em 0 .45em;font-weight:700}" +
+    ".bm-md h1{font-size:1.4em}.bm-md h2{font-size:1.22em}.bm-md h3{font-size:1.1em}.bm-md h4{font-size:1em}" +
+    ".bm-md strong{color:#fff;font-weight:700}" +
+    ".bm-md ul,.bm-md ol{margin:.2em 0 .9em;padding-left:1.4em}.bm-md li{margin:.3em 0}.bm-md li::marker{color:#d4af37}" +
+    ".bm-md hr{border:0;border-top:1px solid rgba(212,175,55,.28);margin:1.3em 0}" +
+    ".bm-md blockquote{margin:.8em 0;padding:.4em .9em;border-left:3px solid #c1121f;background:rgba(255,255,255,.04);color:#d6d6d6}" +
+    ".bm-md a{color:#f5d76e;text-decoration:underline}" +
+    ".bm-md code{font-family:ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;font-size:.88em;background:rgba(212,175,55,.13);color:#f5d76e;padding:.1em .4em;border-radius:6px}" +
+    ".bm-code{margin:.9em 0;border:1px solid rgba(212,175,55,.32);border-radius:12px;background:#0a0a0a;overflow:hidden}" +
+    ".bm-codehead{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:#161010;border-bottom:1px solid rgba(212,175,55,.2);font-size:.7em;letter-spacing:.14em;color:#d4af37;text-transform:uppercase}" +
+    ".bm-copy{background:none;border:1px solid rgba(212,175,55,.5);color:#d4af37;font:inherit;font-size:1em;letter-spacing:.1em;padding:4px 10px;border-radius:8px;cursor:pointer}" +
+    ".bm-copy:active{background:rgba(193,18,31,.3)}" +
+    ".bm-code pre{margin:0;padding:12px 14px;overflow-x:auto;-webkit-user-select:text;user-select:text}" +
+    ".bm-md .bm-code code{display:block;white-space:pre;font-size:.82em;line-height:1.6;color:#eee;background:none;padding:0}" +
+    ".hc{color:#8a9a78;font-style:italic}.hs{color:#9ccc65}.hn{color:#ff8a65}.hk{color:#4fc3f7}" +
+    ".bm-tbl{overflow-x:auto;margin:.9em 0}.bm-md table{border-collapse:collapse;font-size:.92em}" +
+    ".bm-md th,.bm-md td{border:1px solid rgba(212,175,55,.25);padding:6px 10px;text-align:left}.bm-md th{background:rgba(212,175,55,.12);color:#f2d06b}";
+  document.head.appendChild(style);
+
+  function upgrade(b, text) {
+    var keep = Array.prototype.filter.call(b.children, function (c) {
+      try { return getComputedStyle(c).position === "absolute"; } catch (e) { return false; }
+    });
+    b.dataset.raw = text;
+    b.classList.add("bm-rich");
+    b.innerHTML = "";
+    var box = document.createElement("div");
+    box.className = "bm-md";
+    box.innerHTML = render(text);
+    b.appendChild(box);
+    keep.forEach(function (k) { b.appendChild(k); });
+  }
+
+  var orig = window.addMessage;
+  if (typeof orig !== "function") { console.warn("Bobby rich text: addMessage not found"); return; }
+  window.addMessage = function (text, sender) {
+    var before = chat.children.length;
+    var ret = orig.apply(this, arguments);
+    if (sender === "ai" && typeof text === "string") {
+      try {
+        var added = Array.prototype.slice.call(chat.children, before), bubble = null;
+        for (var k = 0; k < added.length && !bubble; k++) {
+          bubble = added[k].classList.contains("msg") ? added[k] : added[k].querySelector(".msg");
+        }
+        if (!bubble && ret && ret.nodeType === 1) bubble = ret.classList.contains("msg") ? ret : ret.querySelector(".msg");
+        if (bubble) { upgrade(bubble, text); chat.scrollTop = chat.scrollHeight; }
+      } catch (e) { console.error(e); }
+    }
+    return ret;
+  };
+
+  chat.addEventListener("click", function (e) {
+    var b = e.target.closest(".bm-copy");
+    if (!b) return;
+    var code = b.closest(".bm-code").querySelector("code").innerText;
+    var done = function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1400); };
+    var fallback = function () {
+      var ta = document.createElement("textarea"); ta.value = code; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (_) {}
+      ta.remove();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done).catch(fallback);
+    else fallback();
+  });
+})();
+</script>
+ 
 </body>
                                                                        </html>
