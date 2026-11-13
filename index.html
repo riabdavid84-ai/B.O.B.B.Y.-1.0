@@ -2442,7 +2442,7 @@
       speak(reply);
       showChips(reply);
     } catch (err) {
-      thinkingBubble.textContent = "Connection error. Check your internet or Worker URL.";
+      thinkingBubble.textContent = (err && err.message === "locked") ? "Locked. Enter your passcode again." : "Connection dropped (" + (err && err.message ? err.message : "network") + "). Stay in the app while Bobby replies, then send again.";
       console.error(err);
     } finally {
       avatarCore.classList.remove("thinking");
