@@ -881,7 +881,7 @@
   }
   unlockBtn.addEventListener("click", tryUnlock);
   passInput.addEventListener("keydown", (e) => { if (e.key === "Enter") tryUnlock(); });
-  if (sessionStorage.getItem("bobby_unlocked") === "true") lockScreen.style.display = "none";
+  if (sessionStorage.getItem("bobby_unlocked") === "true" && sessionStorage.getItem("bobby_pass")) lockScreen.style.display = "none";
 
   // ---- Element refs ----
   const chatEl = document.getElementById("chat");
