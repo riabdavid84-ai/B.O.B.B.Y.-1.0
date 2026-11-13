@@ -2968,6 +2968,67 @@
   inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) intercept(e); }, true);
 })();
      </script>
+<script>
+(function () {
+  "use strict";
+  var chat = document.getElementById("chat");
+  var inputEl = document.getElementById("userInput");
+  var sendBtn = document.getElementById("sendBtn");
+  if (!chat || !inputEl || !sendBtn) return;
+
+  var ERR = /^(Connection dropped|Connection error|Error \d|That didn't come through)/i;
+
+  var st = document.createElement("style");
+  st.textContent = ".bm-retry{display:block;margin-top:10px;background:none;border:1px solid #d4af37;color:#d4af37;font:inherit;font-size:.8em;letter-spacing:.12em;padding:6px 14px;border-radius:10px;cursor:pointer}.bm-retry:active{background:rgba(193,18,31,.3)}";
+  document.head.appendChild(st);
+
+  function lastUserText() {
+    if (typeof history === "undefined" || !history.length) return null;
+    var h = history[history.length - 1];
+    if (!h || h.role !== "user") return null;
+    var t = "", ok = true;
+    (h.parts || []).forEach(function (p) { if (p && p.text) t += p.text; else ok = false; });
+    return ok && t.trim() ? t : null;
+  }
+
+  function topOf(el) {
+    while (el.parentElement && el.parentElement !== chat) el = el.parentElement;
+    return el;
+  }
+
+  function retry(errBubble) {
+    var t = lastUserText();
+    if (t === null) return;
+    history.pop();
+    if (typeof saveState === "function") saveState();
+    var us = chat.querySelectorAll(".msg.user");
+    var userBubble = us.length ? us[us.length - 1] : null;
+    topOf(errBubble).remove();
+    if (userBubble) topOf(userBubble).remove();
+    inputEl.value = t;
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    sendBtn.click();
+  }
+
+  function scan() {
+    var all = chat.querySelectorAll(".msg.ai");
+    var b = all.length ? all[all.length - 1] : null;
+    if (!b || b.querySelector(".bm-retry")) return;
+    if (!ERR.test((b.textContent || "").trim())) return;
+    if (lastUserText() === null) return;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "bm-retry";
+    btn.textContent = "Retry";
+    btn.addEventListener("click", function (e) { e.stopPropagation(); retry(b); });
+    b.appendChild(btn);
+  }
+
+  var timer = null;
+  new MutationObserver(function () { clearTimeout(timer); timer = setTimeout(scan, 150); })
+    .observe(chat, { childList: true, subtree: true, characterData: true });
+})();
+</script>
  
 </body>
                                                                        </html>
