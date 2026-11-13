@@ -2430,7 +2430,7 @@
         throw new Error("locked");
            }
       const data = await response.json();
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "That didn't come through. Check your Worker setup.";
+      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || ("Error " + response.status + ": " + (data?.error?.message || JSON.stringify(data)).slice(0, 300));
       const aiMsgId = genId();
       thinkingBubble.remove();
       addMessage(reply, "ai", null, null, aiMsgId);
