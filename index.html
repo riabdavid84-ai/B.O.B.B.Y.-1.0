@@ -3116,6 +3116,268 @@
   inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) intercept(e); }, true);
 })();
        </script>
+<script>
+(function () {
+  "use strict";
+  var chat = document.getElementById("chat");
+  var inputEl = document.getElementById("userInput");
+  var sendBtn = document.getElementById("sendBtn");
+  if (!chat || !inputEl || !sendBtn) return;
+
+  var STOP = {};
+  ("the and for that this with about our chat chats conversation convo talk topic where what when how from into have had was were are you your open find switch recall bring pull take can could please one").split(" ")
+    .forEach(function (w) { STOP[w] = 1; });
+
+  var RE_OPEN1 = /^\s*(?:please\s+)?(?:open|go\s+to|switch\s+to|find|recall|bring\s+up|pull\s+up|take\s+me\s+to)\s+(?:the\s+|our\s+|that\s+|my\s+)?(?:chat|conversation|convo|talk|topic)\s+(?:(?:about|on|for|regarding|where\s+we\s+(?:talked|discussed)(?:\s+about)?)\s+)?(.+?)\s*[.!?]?\s*$/i;
+  var RE_OPEN2 = /^\s*(?:please\s+)?(?:open|go\s+to|switch\s+to|find|pull\s+up)\s+(.+?)\s+(?:chat|conversation|convo)\s*[.!?]?\s*$/i;
+  var RE_RECAP = /^\s*(?:please\s+)?(?:recap|summari[sz]e|remind\s+me\s+of)\s+(?:the\s+|our\s+|that\s+|my\s+)?(?:chat|conversation|convo|talk|topic)\s+(?:about|on|for|regarding|where\s+we\s+(?:talked|discussed)(?:\s+about)?)\s+(.+?)\s*[.!?]?\s*$/i;
+  var RE_RENAME = /^\s*rename\s+(?:this\s+|the\s+)?(?:chat|conversation|convo)\s*(?:to|as|:)\s*(.+?)\s*$/i;
+  var RE_NAMEIT = /^\s*(?:name|title|rename)\s+(?:this\s+|the\s+)?(?:chat|conversation|convo)\s*[.!?]?\s*$/i;
+
+  function parseCmd(v) {
+    var m;
+    if ((m = v.match(RE_RECAP))) return { type: "recap", q: m[1] };
+    if ((m = v.match(RE_RENAME))) return { type: "rename", q: m[1] };
+    if (RE_NAMEIT.test(v)) return { type: "nameit" };
+    if ((m = v.match(RE_OPEN1))) return { type: "open", q: m[1] };
+    if ((m = v.match(RE_OPEN2))) return { type: "open", q: m[1] };
+    return null;
+  }
+
+  function msgText(m) {
+    if (!m) return "";
+    if (typeof m === "string") return m;
+    if (Array.isArray(m.parts)) return m.parts.map(function (p) { return p && p.text ? p.text : ""; }).join(" ").trim();
+    return String(m.text || m.content || "");
+  }
+  function msgsOf(s) { var a = s.history || s.messages || s.chat || []; return Array.isArray(a) ? a : []; }
+  function isUser(m) { return m && m.role === "user"; }
+
+  function loadSessions() {
+    var raw = null, data, list = [];
+    try { raw = localStorage.getItem("bobby_sessions"); } catch (e) {}
+    if (!raw) return list;
+    try { data = JSON.parse(raw); } catch (e) { return list; }
+    if (data && !Array.isArray(data) && Array.isArray(data.sessions)) data = data.sessions;
+    if (Array.isArray(data)) {
+      data.forEach(function (s, i) { if (s && typeof s === "object") list.push({ id: s.id != null ? s.id : i, s: s }); });
+    } else if (data && typeof data === "object") {
+      Object.keys(data).forEach(function (k) { var s = data[k]; if (s && typeof s === "object") list.push({ id: s.id != null ? s.id : k, s: s }); });
+    }
+    return list;
+  }
+
+  function indexSessions(excludeId) {
+    return loadSessions().map(function (e) {
+      var ms = msgsOf(e.s), first = "", last = "";
+      for (var i = 0; i < ms.length; i++) {
+        var t = msgText(ms[i]);
+        if (!t) continue;
+        if (isUser(ms[i])) { if (!first) first = t; } else { last = t; }
+      }
+      return {
+        id: e.id, title: String(e.s.title || "Untitled"), first: first, last: last, msgs: ms,
+        body: ms.map(msgText).join(" ").toLowerCase()
+      };
+    }).filter(function (it) {
+      return it.msgs.length > 0 && (excludeId == null || String(it.id) !== String(excludeId));
+    });
+  }
+
+  function keywordSearch(q, items) {
+    var words = q.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2 && !STOP[w]; });
+    if (!words.length) return [];
+    var scored = items.map(function (it) {
+      var sc = 0, title = it.title.toLowerCase();
+      words.forEach(function (w) {
+        if (title.indexOf(w) > -1) sc += 5;
+        var c = it.body.split(w).length - 1;
+        sc += Math.min(c, 3);
+      });
+      return { it: it, sc: sc };
+    }).filter(function (x) { return x.sc > 0; });
+    scored.sort(function (a, b) { return b.sc - a.sc; });
+    return scored.slice(0, 3).map(function (x) { return x.it; });
+  }
+
+  function cleanTitle(t) {
+    t = String(t || "").split("\n")[0].replace(/^["'“‘*#\s]+|["'”’*#.!\s]+$/g, "").trim();
+    return t.slice(0, 80);
+  }
+
+  async function ask(prompt) {
+    var r = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-bobby-pass": sessionStorage.getItem("bobby_pass") || "" },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] })
+    });
+    if (r.status === 401) throw new Error("Locked. Close and reopen the app, then enter your passcode.");
+    var data = await r.json();
+    var c = data && data.candidates && data.candidates[0];
+    var out = c && c.content && c.content.parts && c.content.parts[0] && c.content.parts[0].text;
+    if (!out) throw new Error("Error " + r.status + ": " + String((data && data.error && data.error.message) || "no reply").slice(0, 200));
+    return out.trim();
+  }
+
+  function say(t, who) { addMessage(t, who); return chat.lastElementChild; }
+  function bubbleOf(node) {
+    if (!node) return null;
+    if (node.classList && node.classList.contains("msg")) return node;
+    return node.querySelector ? node.querySelector(".msg") : null;
+  }
+  function currentId() {
+    try { var s = (typeof getCurrentSession === "function") ? getCurrentSession() : null; return s && s.id != null ? s.id : null; } catch (e) { return null; }
+  }
+
+  var st = document.createElement("style");
+  st.textContent = ".bm-pick{display:block;width:100%;text-align:left;margin-top:8px;background:none;border:1px solid #d4af37;color:#f2d06b;font:inherit;font-size:.9em;padding:10px 12px;border-radius:10px;cursor:pointer}.bm-pick:active{background:rgba(193,18,31,.3)}";
+  document.head.appendChild(st);
+
+  function openSession(id) {
+    try { if (typeof saveState === "function") saveState(); } catch (e) {}
+    var raw = null;
+    try { raw = localStorage.getItem("bobby_current_session_id"); } catch (e) {}
+    var val = (raw && raw.charAt(0) === '"') ? JSON.stringify(String(id)) : String(id);
+    try { localStorage.setItem("bobby_current_session_id", val); } catch (e) {}
+    location.reload();
+  }
+
+  async function aiSearch(q, items) {
+    var list = items.slice(0, 60);
+    var lines = list.map(function (it, i) {
+      return (i + 1) + ". " + it.title + " | " + it.first.slice(0, 110).replace(/\n/g, " ") + " | " + it.last.slice(0, 110).replace(/\n/g, " ");
+    }).join("\n");
+    var out = await ask('The user wants to open a past chat about: "' + q + '".\nHere are their chats, numbered, as title | first message | last reply:\n' + lines +
+      "\n\nReply with ONLY the numbers of the matching chats, best match first, separated by commas (max 3). If none match, reply NONE.");
+    var nums = (out.match(/\d+/g) || []).map(Number).filter(function (n) { return n >= 1 && n <= list.length; });
+    var seen = {}, res = [];
+    nums.forEach(function (n) { if (!seen[n]) { seen[n] = 1; res.push(list[n - 1]); } });
+    return res.slice(0, 3);
+  }
+
+  async function findChats(q) {
+    var items = indexSessions(currentId());
+    if (!items.length) return [];
+    var found = [];
+    try { found = await aiSearch(q, items); } catch (e) { found = []; }
+    if (!found.length) found = keywordSearch(q, items);
+    return found;
+  }
+
+  async function doOpen(q) {
+    var wait = say("Looking through your chats...", "ai");
+    try {
+      var found = await findChats(q);
+      if (wait) wait.remove();
+      if (!found.length) { say("I couldn't find a chat about that. Try other words, or open CHATS and look.", "ai"); return; }
+      if (found.length === 1) {
+        say('Opening "' + found[0].title + '"...', "ai");
+        setTimeout(function () { openSession(found[0].id); }, 700);
+        return;
+      }
+      var b = bubbleOf(say("I found a few. Tap the one you want:", "ai"));
+      found.forEach(function (it) {
+        var btn = document.createElement("button");
+        btn.type = "button"; btn.className = "bm-pick"; btn.textContent = it.title;
+        btn.addEventListener("click", function (e) { e.stopPropagation(); openSession(it.id); });
+        if (b) b.appendChild(btn);
+      });
+    } catch (e) { if (wait) wait.remove(); say(String(e.message || e), "ai"); }
+  }
+
+  async function doRecap(q) {
+    var wait = say("Looking through your chats...", "ai");
+    try {
+      var found = await findChats(q);
+      if (!found.length) { if (wait) wait.remove(); say("I couldn't find a chat about that.", "ai"); return; }
+      var it = found[0];
+      var tx = it.msgs.map(function (m) { var t = msgText(m); return t ? (isUser(m) ? "User" : "Bobby") + ": " + t : ""; }).filter(Boolean).join("\n");
+      if (tx.length > 12000) tx = tx.slice(-12000);
+      var out = await ask("Recap this past conversation for the user. Give the topic in one line, then 4 to 8 short bullet points covering what was discussed, decisions made and anything left open. Use '- ' for bullets.\n\nCONVERSATION:\n" + tx);
+      if (wait) wait.remove();
+      say('Recap of "' + it.title + '":\n\n' + out + '\n\nSay `open chat about ' + q + '` if you want to go back into it.', "ai");
+    } catch (e) { if (wait) wait.remove(); say(String(e.message || e), "ai"); }
+  }
+
+  function setTitle(t) {
+    if (typeof getCurrentSession !== "function") return false;
+    var s = getCurrentSession();
+    if (!s) return false;
+    s.title = t; s.autoTitled = true;
+    try { if (typeof saveState === "function") saveState(); } catch (e) {}
+    return true;
+  }
+
+  function currentTranscript() {
+    var lines = [];
+    for (var i = 0; i < history.length; i++) {
+      var t = msgText(history[i]);
+      if (t) lines.push((isUser(history[i]) ? "User" : "Bobby") + ": " + t);
+    }
+    var s = lines.join("\n");
+    return s.length > 8000 ? s.slice(-8000) : s;
+  }
+
+  function titlePrompt(tx) {
+    return "Write a clear, specific title for this conversation. Use as many words as it needs (usually 3 to 10). No quotes, no emoji, no trailing period. Output only the title.\n\nCONVERSATION:\n" + tx;
+  }
+
+  var titling = false, tries = {};
+  async function autoTitle() {
+    if (titling || typeof getCurrentSession !== "function" || typeof history === "undefined") return;
+    var s = getCurrentSession();
+    if (!s || s.autoTitled || history.length < 2) return;
+    var last = history[history.length - 1];
+    if (!last || last.role !== "model") return;
+    var key = String(s.id != null ? s.id : "cur");
+    if ((tries[key] || 0) >= 2) return;
+    var first = msgText(history[0]);
+    var isDefault = !s.title || s.title === "New Chat" || s.title === first.slice(0, 32) || s.title === (history[0] && history[0]._fileName);
+    if (!isDefault) { s.autoTitled = true; return; }
+    tries[key] = (tries[key] || 0) + 1;
+    titling = true;
+    try {
+      var t = cleanTitle(await ask(titlePrompt(currentTranscript())));
+      if (t) setTitle(t);
+    } catch (e) { } finally { titling = false; }
+  }
+
+  var tm = null;
+  new MutationObserver(function () { clearTimeout(tm); tm = setTimeout(autoTitle, 2500); })
+    .observe(chat, { childList: true, subtree: true });
+
+  async function doNameIt() {
+    var wait = say("Thinking of a name...", "ai");
+    try {
+      var t = cleanTitle(await ask(titlePrompt(currentTranscript())));
+      if (wait) wait.remove();
+      if (t && setTitle(t)) say('Named this chat "' + t + '".', "ai");
+      else say("I couldn't name this chat yet.", "ai");
+    } catch (e) { if (wait) wait.remove(); say(String(e.message || e), "ai"); }
+  }
+
+  function intercept(e) {
+    var v = inputEl.value, cmd = parseCmd(v);
+    if (!cmd) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    inputEl.value = "";
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    addMessage(v.trim(), "user");
+    if (cmd.type === "open") doOpen(cmd.q);
+    else if (cmd.type === "recap") doRecap(cmd.q);
+    else if (cmd.type === "nameit") doNameIt();
+    else if (cmd.type === "rename") {
+      var t = cleanTitle(cmd.q);
+      say(t && setTitle(t) ? 'Renamed this chat to "' + t + '".' : "I couldn't rename this chat.", "ai");
+    }
+  }
+  sendBtn.addEventListener("click", intercept, true);
+  inputEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) intercept(e);
+  }, true);
+})();
+   </script>
  
 </body>
                                                                        </html>
