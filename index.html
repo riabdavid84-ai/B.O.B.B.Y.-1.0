@@ -2451,7 +2451,7 @@
 
   sendBtn.addEventListener("click", sendMessage);
   inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(pointer: coarse)").matches) {
       e.preventDefault();
       sendMessage();
     }
