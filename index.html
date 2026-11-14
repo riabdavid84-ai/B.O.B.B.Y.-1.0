@@ -3029,6 +3029,93 @@
     .observe(chat, { childList: true, subtree: true, characterData: true });
 })();
 </script>
+ <script>
+(function () {
+  "use strict";
+  var MIN = 100000;
+
+  function walk(x) {
+    if (Array.isArray(x)) {
+      var out = [], removed = false;
+      for (var i = 0; i < x.length; i++) {
+        var it = x[i];
+        if (it && typeof it === "object" && (it.inline_data || it.inlineData)) { removed = true; continue; }
+        out.push(walk(it));
+      }
+      if (removed) out.push({ text: "[attachment removed to save space]" });
+      return out;
+    }
+    if (x && typeof x === "object") {
+      for (var k in x) {
+        if (Object.prototype.hasOwnProperty.call(x, k)) {
+          var v = x[k];
+          if (typeof v === "string" && v.length > 2000 && /^data:/.test(v)) x[k] = null;
+          else x[k] = walk(v);
+        }
+      }
+    }
+    return x;
+  }
+
+  function slim(str) { return JSON.stringify(walk(JSON.parse(str))); }
+
+  var rawSet = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) {
+    if (this === window.localStorage && typeof k === "string" && k.indexOf("bobby_") === 0 &&
+        typeof v === "string" && v.length > MIN) {
+      try { v = slim(v); } catch (e) {}
+    }
+    return rawSet.call(this, k, v);
+  };
+
+  function usedBytes() {
+    var n = 0;
+    try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); n += (k.length + (localStorage.getItem(k) || "").length) * 2; } } catch (e) {}
+    return n;
+  }
+  function mb(n) { return (n / 1048576).toFixed(2); }
+
+  function compactAll() {
+    var before = usedBytes();
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k.indexOf("bobby_") !== 0) continue;
+        var v = localStorage.getItem(k);
+        if (v && v.length > MIN) { try { rawSet.call(localStorage, k, slim(v)); } catch (e) {} }
+      }
+    } catch (e) {}
+    return { before: before, after: usedBytes() };
+  }
+
+  compactAll();
+
+  var chat = document.getElementById("chat");
+  var inputEl = document.getElementById("userInput");
+  var sendBtn = document.getElementById("sendBtn");
+  if (!chat || !inputEl || !sendBtn) return;
+  var CHECK = /^\s*(storage|storage check|check storage)\s*[.!?]?\s*$/i;
+  var CLEAN = /^\s*(free up space|clean up storage|clean storage)\s*[.!?]?\s*$/i;
+
+  function intercept(e) {
+    var v = inputEl.value, isCheck = CHECK.test(v), isClean = CLEAN.test(v);
+    if (!isCheck && !isClean) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    inputEl.value = "";
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    addMessage(v.trim(), "user");
+    if (isCheck) {
+      addMessage("Bobby is using about " + mb(usedBytes()) + " MB of roughly 5 MB of phone storage.", "ai");
+    } else {
+      var r = compactAll();
+      addMessage("Done. Removed saved photos and PDFs from old chats, and kept all the text.\n\nBefore: " + mb(r.before) + " MB\nAfter: " + mb(r.after) + " MB", "ai");
+    }
+  }
+  sendBtn.addEventListener("click", intercept, true);
+  inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) intercept(e); }, true);
+})();
+       </script>
  
 </body>
                                                                        </html>
