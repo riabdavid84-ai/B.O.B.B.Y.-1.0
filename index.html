@@ -2904,6 +2904,27 @@
     }
     return ret;
   };
+ 
+   function norm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+  function upgradeExisting() {
+    if (typeof history === "undefined" || !history.length) return;
+    var texts = [];
+    for (var i = 0; i < history.length; i++) {
+      var h = history[i];
+      if (!h || h.role === "user") continue;
+      var t = (h.parts || []).map(function (p) { return p && p.text ? p.text : ""; }).join(" ").trim();
+      if (t) texts.push({ raw: t, key: norm(t).slice(0, 40) });
+    }
+    var j = 0;
+    Array.prototype.forEach.call(chat.querySelectorAll(".msg.ai:not(.bm-rich)"), function (b) {
+      var bt = norm(b.textContent);
+      for (var k = j; k < texts.length; k++) {
+        if (texts[k].key && bt.indexOf(texts[k].key) > -1) { upgrade(b, texts[k].raw); j = k + 1; return; }
+      }
+    });
+    chat.scrollTop = chat.scrollHeight;
+  }
+  upgradeExisting();
 
   chat.addEventListener("click", function (e) {
     var b = e.target.closest(".bm-copy");
