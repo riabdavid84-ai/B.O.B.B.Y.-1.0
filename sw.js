@@ -1,7 +1,15 @@
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
-// Pass-through fetch handler: makes the app installable, caches nothing (no stale pages).
-self.addEventListener("fetch", () => {});
+
+// Always load the newest page when the app opens (no stale copies)
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request.url, { cache: "no-store" }).catch(() => fetch(event.request))
+    );
+  }
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
