@@ -2828,6 +2828,49 @@
     ".bm-tbl{overflow-x:auto;margin:.9em 0}.bm-md table{border-collapse:collapse;font-size:.92em}" +
     ".bm-md th,.bm-md td{border:1px solid rgba(212,175,55,.25);padding:6px 10px;text-align:left}.bm-md th{background:rgba(212,175,55,.12);color:#f2d06b}";
   document.head.appendChild(style);
+ 
+   /* ---------- math (KaTeX) ---------- */
+    function protectMath(md, maths) {
+    function keep(tex, disp) { maths.push({ tex: tex.trim(), disp: disp }); return "\u0001" + (maths.length - 1) + "\u0002"; }
+    return md.split(/(```[\s\S]*?```|`[^`\n]+`)/).map(function (seg, i) {
+      if (i % 2) return seg;
+      return seg
+        .replace(/\$\$([\s\S]+?)\$\$/g, function (m, a) { return keep(a, true); })
+        .replace(/\\\[([\s\S]+?)\\\]/g, function (m, a) { return keep(a, true); })
+        .replace(/\\\(([\s\S]+?)\\\)/g, function (m, a) { return keep(a, false); })
+        .replace(/\$(?!\s)([^$\n]*?[^\s$])\$(?!\d)/g, function (m, a) { return keep(a, false); })
+        .replace(/\\begin\{(cases|aligned|align\*?|gathered|array|matrix|pmatrix|bmatrix|vmatrix)\}[\s\S]+?\\end\{\1\}/g, function (m) { return keep(m, true); });
+    }).join("");
+    }
+  function restoreMath(html, maths) {
+    return html.replace(/\u0001(\d+)\u0002/g, function (m, i) {
+      var x = maths[i];
+      if (!x) return "";
+      var shown = x.disp ? "$$" + x.tex + "$$" : "$" + x.tex + "$";
+      return '<span class="bm-math' + (x.disp ? " bm-disp" : "") + '" data-tex="' + esc(x.tex).replace(/"/g, "&quot;") + '">' + esc(shown) + "</span>";
+    });
+  }
+  function renderMath(root) {
+    if (!window.katex) return;
+    Array.prototype.forEach.call(root.querySelectorAll(".bm-math:not([data-done])"), function (n) {
+      try {
+        window.katex.render(n.getAttribute("data-tex"), n, { displayMode: n.classList.contains("bm-disp"), throwOnError: false, strict: "ignore" });
+        n.setAttribute("data-done", "1");
+      } catch (e) {}
+    });
+  }
+  var kcss = document.createElement("link");
+  kcss.rel = "stylesheet";
+  kcss.href = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
+  document.head.appendChild(kcss);
+  var ks = document.createElement("script");
+  ks.src = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js";
+  ks.async = true;
+  ks.onload = function () { renderMath(chat); };
+  document.head.appendChild(ks);
+  var mstyle = document.createElement("style");
+  mstyle.textContent = ".bm-disp{display:block;text-align:center;margin:.9em 0;overflow-x:auto;overflow-y:hidden}.bm-math .katex{font-size:1.1em}.bm-math .katex-display{margin:0}";
+  document.head.appendChild(mstyle);
 
   function upgrade(b, text) {
     var keep = Array.prototype.filter.call(b.children, function (c) {
