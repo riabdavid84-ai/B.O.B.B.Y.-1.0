@@ -2740,6 +2740,8 @@
   function cells(r) { return r.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); }); }
 
   function render(md) {
+    var maths = [];
+    md = protectMath(md, maths);
     var lines = md.replace(/\r/g, "").split("\n"), out = [], i = 0;
     while (i < lines.length) {
       var ln = lines[i], m;
