@@ -2791,7 +2791,7 @@
              !LI.test(lines[i]) && !/^\s*>/.test(lines[i]) && !HR.test(lines[i])) { p.push(lines[i]); i++; }
       out.push("<p>" + inline(esc(p.join("\n"))).replace(/\n/g, "<br>") + "</p>");
     }
-    return out.join("");
+    return restoreMath(out.join(""), maths);
   }
 
   var chat = document.getElementById("chat");
