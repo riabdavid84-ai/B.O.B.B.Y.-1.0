@@ -2839,6 +2839,7 @@
     var box = document.createElement("div");
     box.className = "bm-md";
     box.innerHTML = render(text);
+    renderMath(box);
     b.appendChild(box);
     keep.forEach(function (k) { b.appendChild(k); });
   }
